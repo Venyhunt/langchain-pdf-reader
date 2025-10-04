@@ -1,9 +1,14 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>LangChain PDF Reader</title>
+  <title>PDF Upload</title>
 </head>
 <body>
-  <h1>Hello, LangChain PDF Reader!</h1>
+  <h2>Upload PDF</h2>
+  <form action="/upload" method="post" enctype="multipart/form-data">
+    <input type="file" name="pdf" accept=".pdf" required>
+    <button type="submit">Upload</button>
+  </form>
 </body>
 </html>
+
