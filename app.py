@@ -1,12 +1,80 @@
 print("LangChain PDF Reader scaffold ready.")
+from dotenv import load_dotenv
+import os
+
+# load environment variables from .env
+load_dotenv()
+
+# now OPENAI_API_KEY is availpython app.py
+# now OPENAI_API_KEY is available via os.environ
+print("OpenAI API key loaded:", bool(os.environ.get("OPENAI_API_KEY")))
+
+
 from flask import Flask, request, render_template
 import os
 from PyPDF2 import PdfReader
+import hashlib                # optional — used to create a stable id per pdf
+from langchain_openai import OpenAIEmbeddings
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.vectorstores import Chroma
+from langchain_community.document_loaders import PyPDFLoader
 
 app = Flask(__name__)
 
 # ensure samples folder exists
 os.makedirs("samples", exist_ok=True)
+
+def file_hash(path):
+    """Return md5 hash of file bytes — used to create a stable collection name per file."""
+    with open(path, "rb") as f:
+        return hashlib.md5(f.read()).hexdigest()
+
+def index_file(pdf_path, chroma_dir="chroma_store/", use_hash_collection=True, max_chunks=5):
+    """
+    Index a PDF into Chroma.
+    - pdf_path: path to PDF file on disk
+    - chroma_dir: where Chroma persists data
+    - use_hash_collection: if True, use md5(file) as a collection name (safer when many files)
+    - max_chunks: if set, only index first N chunks (useful for testing + cost control)
+    Returns: number of chunks processed (0 if skipped)
+    """
+    # ensure chroma dir exists
+    os.makedirs(chroma_dir, exist_ok=True)
+
+    # If using file-hash collections, skip if collection folder already exists
+    if use_hash_collection:
+        coll = file_hash(pdf_path)
+        coll_path = os.path.join(chroma_dir, coll)
+        if os.path.exists(coll_path) and os.listdir(coll_path):
+            print(f"[index_file] collection {coll} already exists — skipping.")
+            return 0
+
+    # Load PDF into LangChain Documents (PyPDFLoader handles pages & metadata)
+    loader = PyPDFLoader(pdf_path)
+    docs = loader.load()
+
+    # Split into chunks that embed nicely for LLMs/embedders
+    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+    chunks = splitter.split_documents(docs)
+
+    # optional: limit chunks during local testing to save OpenAI calls
+    if max_chunks:
+        chunks = chunks[:max_chunks]
+
+    print(f"[index_file] {pdf_path} -> {len(chunks)} chunks (persist_dir={chroma_dir})")
+
+    # Create embeddings and persist to Chroma
+    embeddings = OpenAIEmbeddings()
+    collection_name = file_hash(pdf_path) if use_hash_collection else None
+
+    db = Chroma.from_documents(
+        chunks,
+        embeddings,
+        persist_directory=chroma_dir,
+        collection_name=collection_name
+    )
+    db.persist()
+    return len(chunks)
 
 @app.route("/", methods=["GET"])
 def index():
@@ -20,6 +88,10 @@ def upload():
     file = request.files["pdf"]
     if file.filename == "":
         return "No selected file", 400
+    
+     # ---- NEW: Check file type ----
+    if not file.filename.lower().endswith(".pdf"):
+        return "Only PDF files are allowed!", 400
 
     filepath = os.path.join("samples", file.filename)
     file.save(filepath)
@@ -29,8 +101,20 @@ def upload():
     text = ""
     for page in reader.pages:
         text += page.extract_text() or ""
+
+     # ---- NEW: Index PDF dynamically ----
+    count = index_file(filepath, chroma_dir="chroma_store/", use_hash_collection=True, max_chunks=5)
+    if count == 0:
+        index_msg = "Already indexed (collection exists)."
+    else:
+        index_msg = f"Indexed {count} chunks, stored to chroma_store/"
     
-    return f"Uploaded {file.filename} ✅<br> Pages: {len(reader.pages)}<br> Characters: {len(text)}"
+    return (
+    f"Uploaded {file.filename} ✅<br>"
+    f"Pages: {len(reader.pages)}<br>"
+    f"Characters: {len(text)}<br>"
+    f"{index_msg}")
+
 
 if __name__ == "__main__":
     app.run(debug=True)
