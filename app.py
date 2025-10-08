@@ -10,16 +10,28 @@ load_dotenv()
 print("OpenAI API key loaded:", bool(os.environ.get("OPENAI_API_KEY")))
 
 
-from flask import Flask, request, render_template
+from flask import Flask, request, render_template, jsonify,session
 import os
+from flask_session import Session
 from PyPDF2 import PdfReader
 import hashlib                # optional — used to create a stable id per pdf
 from langchain_openai import OpenAIEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
+from langchain_community.llms import OpenAI
+from langchain.chains import RetrievalQA
 from langchain_community.document_loaders import PyPDFLoader
 
 app = Flask(__name__)
+
+# session config (keeps the "current uploaded file" between requests in dev)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-key")  # change in prod
+app.config["SESSION_TYPE"] = "filesystem"                             # store sessions on disk
+# optional: custom dir for session files
+app.config["SESSION_FILE_DIR"] = os.path.join(os.getcwd(), "flask_session")
+os.makedirs(app.config["SESSION_FILE_DIR"], exist_ok=True)
+Session(app)
+
 
 # ensure samples folder exists
 os.makedirs("samples", exist_ok=True)
@@ -108,12 +120,92 @@ def upload():
         index_msg = "Already indexed (collection exists)."
     else:
         index_msg = f"Indexed {count} chunks, stored to chroma_store/"
+   
+       # after indexing finished
+    collection_id = file_hash(filepath)
+
+    # store the current uploaded collection in the server session
+    session["current_collection"] = collection_id
+
+    # render index.html with upload info + collection (so hidden input is filled)
+    return render_template(
+        "index.html",
+        upload_success=True,
+        filename=file.filename,
+        index_msg=index_msg,
+        collection=collection_id
+    )
+
+
+# --- CONFIG ---
+CHROMA_DIR = os.path.join(os.getcwd(), "chroma_store")
+
+# --- /ask route ---
+@app.route("/ask", methods=["POST"])
+def ask():
     
-    return (
-    f"Uploaded {file.filename} ✅<br>"
-    f"Pages: {len(reader.pages)}<br>"
-    f"Characters: {len(text)}<br>"
-    f"{index_msg}")
+    """
+    Accepts:
+     - form field 'query' (from templates) OR JSON body {"query": "...", "collection": "..."}
+    Returns:
+     - If JSON request: JSON {answer, sources}
+     - If form POST: render_template('index.html', answer=answer, sources=sources)
+    """
+       # get query from JSON or form
+    if request.is_json:
+        payload = request.get_json()
+        query = payload.get("query", "").strip()
+        collection_name = payload.get("collection")
+ 
+    # FALLBACK: use last uploaded collection stored in session (if present)
+    if not collection_name:
+        collection_name = session.get("current_collection")
+
+
+    if not query:
+        return jsonify({"error": "Empty query"}), 400
+
+    embeddings = OpenAIEmbeddings()
+
+    try:
+        vectordb = Chroma(
+            persist_directory=CHROMA_DIR,
+            embedding_function=embeddings,
+            collection_name=collection_name  # may be None if single-collection setup
+        )
+    except Exception as e:
+        return jsonify({"error": f"Failed loading Chroma store: {e}"}), 500
+
+    retriever = vectordb.as_retriever(search_kwargs={"k": 3})
+    llm = OpenAI(temperature=0)
+
+    qa = RetrievalQA.from_chain_type(
+        llm=llm,
+        chain_type="stuff",
+        retriever=retriever,
+        return_source_documents=True
+    )
+
+    try:
+        result = qa({"query": query})
+    except Exception as e:
+        return jsonify({"error": f"QA execution failed: {e}"}), 500
+
+    answer = result.get("result") or result.get("answer") or "No answer."
+    source_docs = result.get("source_documents", [])
+    sources = [
+        {
+            "snippet": (getattr(doc, "page_content", "") or "")[:400],
+            "metadata": getattr(doc, "metadata", {}) or {}
+        }
+        for doc in source_docs
+    ]
+
+    if request.is_json or request.headers.get("Accept") == "application/json":
+        return jsonify({"answer": answer, "sources": sources})
+
+    return render_template("index.html", answer=answer, sources=sources, collection=collection_name)
+
 
 
 if __name__ == "__main__":
