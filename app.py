@@ -66,7 +66,7 @@ def index_file(pdf_path, chroma_dir="chroma_store/", use_hash_collection=True, m
     docs = loader.load()
 
     # Split into chunks that embed nicely for LLMs/embedders
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
     chunks = splitter.split_documents(docs)
 
     # optional: limit chunks during local testing to save OpenAI calls
