@@ -1,4 +1,4 @@
-print("LangChain PDF Reader scaffold ready.")
+print("LangChain PDF Reader scaff")
 from dotenv import load_dotenv
 import os
 
@@ -16,9 +16,12 @@ from flask_session import Session
 from PyPDF2 import PdfReader
 import hashlib                # optional — used to create a stable id per pdf
 from langchain_openai import OpenAIEmbeddings
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+#from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from langchain_community.llms import OpenAI
+#from langchain_community.chains import RetrievalQA
+#from langchain.chains import RetrievalQA
 from langchain.chains import RetrievalQA
 from langchain_community.document_loaders import PyPDFLoader
 
@@ -30,7 +33,7 @@ app.config["SESSION_TYPE"] = "filesystem"                             # store se
 # optional: custom dir for session files
 app.config["SESSION_FILE_DIR"] = os.path.join(os.getcwd(), "flask_session")
 os.makedirs(app.config["SESSION_FILE_DIR"], exist_ok=True)
-Session(app)
+Session(app)   # make sure to understand this part like very in detail
 
 
 # ensure samples folder exists
@@ -41,7 +44,7 @@ def file_hash(path):
     with open(path, "rb") as f:
         return hashlib.md5(f.read()).hexdigest()
 
-def index_file(pdf_path, chroma_dir="chroma_store/", use_hash_collection=True, max_chunks=5):
+def index_file(pdf_path, chroma_dir="chroma_store/", use_hash_collection=True, max_chunks=None):
     """
     Index a PDF into Chroma.
     - pdf_path: path to PDF file on disk
@@ -66,7 +69,7 @@ def index_file(pdf_path, chroma_dir="chroma_store/", use_hash_collection=True, m
     docs = loader.load()
 
     # Split into chunks that embed nicely for LLMs/embedders
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
+    splitter = RecursiveCharacterTextSplitter(chunk_size=750, chunk_overlap=50)
     chunks = splitter.split_documents(docs)
 
     # optional: limit chunks during local testing to save OpenAI calls
@@ -115,7 +118,7 @@ def upload():
         text += page.extract_text() or ""
 
      # ---- NEW: Index PDF dynamically ----
-    count = index_file(filepath, chroma_dir="chroma_store/", use_hash_collection=True, max_chunks=5)
+    count = index_file(filepath, chroma_dir="chroma_store/", use_hash_collection=True, max_chunks=None)
     if count == 0:
         index_msg = "Already indexed (collection exists)."
     else:
@@ -176,8 +179,8 @@ def ask():
     except Exception as e:
         return jsonify({"error": f"Failed loading Chroma store: {e}"}), 500
 
-    retriever = vectordb.as_retriever(search_kwargs={"k": 3})
-    llm = OpenAI(temperature=0)
+    retriever = vectordb.as_retriever(search_kwargs={"k": 15})
+    llm = OpenAI(model_name="gpt-4o",temperature=0)
 
     qa = RetrievalQA.from_chain_type(
         llm=llm,
