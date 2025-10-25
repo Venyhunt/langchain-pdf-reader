@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+ <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <title>LangChain PDF QA</title>
+</head>
+<body>
+  <h1 id="main-title">LangChain PDF Reader</h1>
+
+<div class="form-row">
+  <!-- Upload PDF section -->
+  <div class="form-section">
+    <h2>Upload PDF</h2>
+    <form action="/upload" method="post" enctype="multipart/form-data">
+      <input type="file" name="pdf" accept=".pdf" required>
+      <button type="submit">Upload</button>
+    </form>
+
+    {% if upload_success %}
+      <p><b>{{ filename }}</b> Uploaded Successfully!</p>
+      <p>{{ index_msg }}</p>
+    {% endif %}
+  </div>
+
+  <!-- Ask PDF section -->
+  <div class="form-section">
+    <h2>Ask the uploaded PDFs</h2>
+    <form id="ask-form" action="/ask" method="post">
+      <input id="query-input" type="text" name="query" placeholder="Ask something..." required>
+      <input id="collection-input" type="hidden" name="collection" value="{{ collection }}">
+      <button type="submit">Ask</button>
+      <span id="spinner" style="display:none;">⏳...</span>
+    </form>
+  </div>
+</div>
+
+<hr>
+
+<div id="answer-section" style="margin-top:20px;">
+  <h3>Answer:</h3>
+  <p id="answer"></p>
+  <h4>Sources:</h4>
+  <ul id="sources"></ul>
+</div>
+<!-- Add this line inside <body>, near the end -->
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+
+ 
+</body>
+</html>
