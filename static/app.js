@@ -64,4 +64,5 @@ document.addEventListener("DOMContentLoaded", () => {
       spinner.style.display = "none";
     }
   });
+
 });

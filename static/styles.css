@@ -1,3 +1,4 @@
+
 /* 🌸 Font + General Reset (keep your old imports) */
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&family=Pacifico&display=swap');
 
@@ -155,4 +156,5 @@ button:hover {
 
 body, h1, form, #answer-section {
   animation: fadeIn 0.7s ease-in;
+
 }

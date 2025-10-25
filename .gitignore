@@ -1,0 +1,9 @@
+venv/
+.env
+__pycache__/
+chroma_store/
+# ignore all PDFs
+samples/*.pdf
+
+# except the sample one
+!samples/example.pdf

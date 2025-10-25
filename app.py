@@ -1,6 +1,8 @@
+
 print("LangChain PDF Reader scaffold ready.")
 from dotenv import load_dotenv
 import os
+
 # load environment variables from .env
 load_dotenv()
 
@@ -8,12 +10,14 @@ load_dotenv()
 # now OPENAI_API_KEY is available via os.environ
 print("OpenAI API key loaded:", bool(os.environ.get("OPENAI_API_KEY")))
 
+
 from flask import Flask, request, render_template, jsonify,session
 import os
 from flask_session import Session
 from PyPDF2 import PdfReader
 import hashlib                # optional — used to create a stable id per pdf
 from langchain_openai import OpenAIEmbeddings
+
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from langchain_community.document_loaders import PyPDFLoader
@@ -30,6 +34,7 @@ app.config["SESSION_TYPE"] = "filesystem"                             # store se
 app.config["SESSION_FILE_DIR"] = os.path.join(os.getcwd(), "flask_session")
 os.makedirs(app.config["SESSION_FILE_DIR"], exist_ok=True)
 Session(app)
+
 
 # ensure samples folder exists
 os.makedirs("samples", exist_ok=True)
@@ -86,7 +91,6 @@ def index_file(pdf_path, chroma_dir="chroma_store/", use_hash_collection=True, m
     db.persist()
     return len(chunks)
 
-
 @app.route("/", methods=["GET"])
 def index():
     return render_template("index.html")
@@ -119,8 +123,8 @@ def upload():
         index_msg = "Already indexed (collection exists)."
     else:
         index_msg = f"Indexed {count} chunks, stored to chroma_store/"
-    
     # after indexing finished
+
     collection_id = file_hash(filepath)
 
     # store the current uploaded collection in the server session
